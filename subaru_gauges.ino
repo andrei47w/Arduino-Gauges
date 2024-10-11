@@ -220,7 +220,7 @@ const float n7 = 48.90444428767570000000000000000;
 int16_t TEMP_MIN = -40;
 uint8_t TEMP_MAX = 140;
 uint8_t TEMP_MIN_GOOD = 75;
-uint8_t TEMP_MAX_GOOD = 105;
+uint8_t TEMP_MAX_GOOD = 110;
 uint8_t TEMP_DIGITS = 3;
 
 uint8_t PRESS_MIN = 0;
