@@ -241,6 +241,8 @@ LinkedList<uint16_t> plotOilTemp = LinkedList<uint16_t>();
 
 float last_oilpressure_number = -100;
 float avg_oilpressure = 0;
+float avg_oilpressure_number = 0;
+uint8_t avg_oilpressure_number_count = 0;
 float last_oilpressure_circle = PRESS_MIN;
 LinkedList<uint16_t> plotOilPress = LinkedList<uint16_t>();
 
@@ -452,24 +454,36 @@ void loop() {
   // PRESSURE
   float p = analogRead(PRESS_SENSOR_PIN) * (SENSOR_VOLTAGE / 1023.0);
   float oilpressure = ((p / SENSOR_VOLTAGE - 0.1) / 0.0008) / 100;
+  avg_oilpressure_number_count ++;
+  avg_oilpressure_number = avg_oilpressure_number + oilpressure / 3;
+
+  // only update oil pressure after 3 reads (this is due to pulsations in the pressure readings)
+  if (avg_oilpressure_number_count >= 3) {
+    oilpressure = avg_oilpressure_number;
+
+    updateOilSwitch(oilpressure, &switch_is_on);
+    if (abs(oilpressure - last_oilpressure_number) > 0.01 ||
+        oilpressure <= PRESS_MIN_GOOD) {
+      updateDisplay(tft2, oilpressure, last_oilpressure_number, 2, PRESS_MIN_GOOD,
+                    PRESS_MAX_GOOD, 0, PRESS_DIGITS, &flash_oil_press);
+      last_oilpressure_number = oilpressure;
+    }
+    if (abs(oilpressure - last_oilpressure_circle) > PRESS_DEGREE_UNIT) {
+      updateCircle(tft2, oilpressure, last_oilpressure_circle, PRESS_MIN,
+                  PRESS_MAX, PRESS_MIN_GOOD, PRESS_MAX_GOOD, 0, 0);
+      last_oilpressure_circle = oilpressure;
+    }
+    
+    avg_oilpressure_number_count = 0;
+    avg_oilpressure_number = 0;
+  }
+
+  // update oil pressure plot
   if (avg_oilpressure == 0) {
     avg_oilpressure = oilpressure;
   } else {
     avg_oilpressure = (avg_oilpressure + oilpressure) / 2;
-  }
-
-  updateOilSwitch(oilpressure, &switch_is_on);
-  if (abs(oilpressure - last_oilpressure_number) > 0.01 ||
-      oilpressure <= PRESS_MIN_GOOD) {
-    updateDisplay(tft2, oilpressure, last_oilpressure_number, 2, PRESS_MIN_GOOD,
-                  PRESS_MAX_GOOD, 0, PRESS_DIGITS, &flash_oil_press);
-    last_oilpressure_number = oilpressure;
-  }
-  if (abs(oilpressure - last_oilpressure_circle) > PRESS_DEGREE_UNIT) {
-    updateCircle(tft2, oilpressure, last_oilpressure_circle, PRESS_MIN,
-                 PRESS_MAX, PRESS_MIN_GOOD, PRESS_MAX_GOOD, 0, 0);
-    last_oilpressure_circle = oilpressure;
-  }
+    }
   if (doReplot) {
     updatePlot(tft2, plotOilPress, max(avg_oilpressure, 0), 0);
     avg_oilpressure = oilpressure;
