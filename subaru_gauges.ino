@@ -181,13 +181,31 @@ GND -> GND LINE
 
 #define SENSOR_VOLTAGE 5
 
-#define COLOR 0xf800
-#define COLOR_GOOD 0x26e4
-#define COLOR_GOOD_FAINT 0x0140
-#define COLOR_BAD 0xfe17
-#define COLOR_MEH 0xfe00
-#define BACKGROUND 0x0000
-#define PLOT_COLOR COLOR_GOOD
+// COLORS --------------------------------------------
+#define BRIGHT_COLOR 0xf800
+#define BRIGHT_COLOR_GOOD 0x26e4
+#define BRIGHT_COLOR_GOOD_FAINT 0x02a0
+#define BRIGHT_COLOR_BAD 0xfe17
+#define BRIGHT_COLOR_MEH 0xfe00
+#define BRIGHT_BACKGROUND 0x0000
+#define BRIGHT_PLOT_COLOR COLOR_GOOD
+
+#define DIM_COLOR 0x3800
+#define DIM_COLOR_GOOD 0x0120
+#define DIM_COLOR_GOOD_FAINT 0x00e0
+#define DIM_COLOR_BAD 0xfe17
+#define DIM_COLOR_MEH 0x3960
+#define DIM_BACKGROUND 0x0000
+#define DIM_PLOT_COLOR DIM_COLOR_GOOD
+
+uint16_t COLOR = BRIGHT_COLOR;
+uint16_t COLOR_GOOD = BRIGHT_COLOR_GOOD;
+uint16_t COLOR_GOOD_FAINT = BRIGHT_COLOR_GOOD_FAINT;
+uint16_t COLOR_BAD = BRIGHT_COLOR_BAD;
+uint16_t COLOR_MEH = BRIGHT_COLOR_MEH;
+uint16_t BACKGROUND = BRIGHT_BACKGROUND;
+uint16_t PLOT_COLOR = BRIGHT_PLOT_COLOR;
+// --------------------------------------------------
 
 #define START_ANGLE 45
 #define END_ANGLE 315
@@ -276,6 +294,102 @@ Adafruit_I2CDevice *i2c_dev = NULL;
 unsigned long startTime;
 bool doReplot = true;
 
+bool button_press_count = getButtonPressed();
+unsigned long last_button_press = millis();
+bool is_waiting_for_button = false;
+
+uint16_t buttonTimeout = 1000; 
+
+void swapColors() {
+  if(COLOR == BRIGHT_COLOR) {
+    Serial.println("swapped to dim");
+    COLOR = DIM_COLOR;
+    COLOR_GOOD = DIM_COLOR_GOOD;
+    COLOR_GOOD_FAINT = DIM_COLOR_GOOD_FAINT;
+    COLOR_BAD = DIM_COLOR_BAD;
+    COLOR_MEH = DIM_COLOR_MEH;
+    BACKGROUND = DIM_BACKGROUND;
+    PLOT_COLOR = DIM_PLOT_COLOR;
+  } else {
+    Serial.println("swapped to bright");
+    COLOR = BRIGHT_COLOR;
+    COLOR_GOOD = BRIGHT_COLOR_GOOD;
+    COLOR_GOOD_FAINT = BRIGHT_COLOR_GOOD_FAINT;
+    COLOR_BAD = BRIGHT_COLOR_BAD;
+    COLOR_MEH = BRIGHT_COLOR_MEH;
+    BACKGROUND = BRIGHT_BACKGROUND;
+    PLOT_COLOR = BRIGHT_PLOT_COLOR;
+  }
+}
+
+bool getButtonPressed() {
+  return analogRead(SCREEN_SWITCH_PIN) >= 1020;
+}
+
+void redrawTFT3() {
+  tft3.fillScreen(BACKGROUND);
+  if(getButtonPressed()) {
+    x_max = 0;
+    x_min = 0;
+    y_max = 0;
+    y_min = 0;
+
+    tft3.fillScreen(BACKGROUND);
+    tft3.drawFastVLine(120, 35, 170, COLOR_GOOD_FAINT);
+    tft3.drawFastHLine(50, 120, 140, COLOR_GOOD_FAINT);
+  } else {
+    tft3.setTextColor(PLOT_COLOR);
+    tft3.setTextSize(2);
+    tft3.setCursor(90, 40);
+    tft3.print(F("water"));
+    updateCircle(tft3, TEMP_MAX, TEMP_MIN, TEMP_MIN, TEMP_MAX, TEMP_MIN_GOOD,
+                TEMP_MAX_GOOD, 1, 1);
+    last_watertemp_number = -100;
+    last_watertemp_circle = TEMP_MIN;
+    avg_watertemp = 0;
+
+    // force update plots
+    startTime -= PLOT_UPDATE_MS;
+    clearPlotPixels(tft3);
+  }
+}
+
+void redrawTFT2() {
+  tft2.fillScreen(BACKGROUND);
+
+  tft2.setTextColor(PLOT_COLOR);
+  tft2.setTextSize(2);
+  tft2.setCursor(90, 40);
+  tft2.print(F("press"));
+  updateCircle(tft2, PRESS_MAX, PRESS_MIN, PRESS_MIN, PRESS_MAX, PRESS_MIN_GOOD,
+              PRESS_MAX_GOOD, 0, 1);
+  last_oilpressure_number = -100;
+  last_oilpressure_circle = PRESS_MIN;
+  avg_oilpressure = 0;
+
+  // force update plots
+  startTime -= PLOT_UPDATE_MS;
+  clearPlotPixels(tft2);
+}
+
+void redrawTFT1() {
+  tft1.fillScreen(BACKGROUND);
+
+  tft1.setTextColor(PLOT_COLOR);
+  tft1.setTextSize(2);
+  tft1.setCursor(105, 40);
+  tft1.print(F("oil"));
+  updateCircle(tft1, TEMP_MAX, TEMP_MIN, TEMP_MIN, TEMP_MAX, TEMP_MIN_GOOD,
+                TEMP_MAX_GOOD, 1, 1);
+  last_oiltemp_number = -100;
+  last_oiltemp_circle = PRESS_MIN;
+  avg_oiltemp = 0;
+
+  // force update plots
+  startTime -= PLOT_UPDATE_MS;
+  clearPlotPixels(tft1);
+}
+
 void setup() {
   pinMode(PRESS_SWITCH_PIN, OUTPUT);
 
@@ -357,12 +471,47 @@ void loop() {
   }
 
   // CHECK FOR BUTTON PRESS
-  bool is_pressed = analogRead(SCREEN_SWITCH_PIN) >= 1020;
+  bool is_pressed = getButtonPressed();
 
   if (is_pressed != button_is_on) {
-    tft3.fillScreen(BACKGROUND);
+    button_press_count ++;
     button_is_on = is_pressed;
 
+    // wait
+    if(button_press_count == 1 && millis() - last_button_press > buttonTimeout) {
+      is_waiting_for_button = true;
+      last_button_press = millis();
+    Serial.print("wait   ");
+    Serial.print(button_press_count);
+    Serial.print("   ");
+    Serial.print( millis() - last_button_press);
+    Serial.print("\n"); 
+    } else
+    // 2 button presses within the last buttonTimeoutms -> change brightness
+    if(is_waiting_for_button && millis() - last_button_press < buttonTimeout) {
+      Serial.println("change light");
+      button_press_count = 0;
+      is_waiting_for_button = false;
+      last_button_press = millis();
+
+      swapColors();
+      redrawTFT1();
+      redrawTFT2();
+      redrawTFT3();
+    }
+  } else  
+  // buttonTimeout ms has passed from last press and we can change the screen
+  // only one press in the last buttonTimeout ms -> change screen
+  if (button_press_count == 1 && millis() - last_button_press > buttonTimeout) {
+    Serial.print("change screen   ");
+    Serial.print(button_press_count);
+    Serial.print("   ");
+    Serial.print( millis() - last_button_press);
+    Serial.print("\n");
+
+    button_press_count = 0;
+    is_waiting_for_button = false;
+    tft3.fillScreen(BACKGROUND);
     if (is_pressed) {
       // reset accel
       x_max = 0;
@@ -398,7 +547,8 @@ void loop() {
     }
   }
 
-  if (!button_is_on) {
+  bool updateWaterTemp = is_waiting_for_button ? button_is_on : !button_is_on;
+  if (updateWaterTemp) {
     // WATER TEMPERATURE
     int w = analogRead(WATER_TEMP_SENSOR_PIN);
     float watertemp = 0;
