@@ -183,18 +183,18 @@ GND -> GND LINE
 
 // COLORS --------------------------------------------
 #define BRIGHT_COLOR 0xf800
-#define BRIGHT_COLOR_GOOD 0x26e4
-#define BRIGHT_COLOR_GOOD_FAINT 0x02a0
+#define BRIGHT_COLOR_GOOD 0x0200
+#define BRIGHT_COLOR_GOOD_FAINT 0x0180
 #define BRIGHT_COLOR_BAD 0xfe17
 #define BRIGHT_COLOR_MEH 0xfe00
 #define BRIGHT_BACKGROUND 0x0000
 #define BRIGHT_PLOT_COLOR COLOR_GOOD
 
 #define DIM_COLOR 0x3800
-#define DIM_COLOR_GOOD 0x0120
+#define DIM_COLOR_GOOD 0x0240
 #define DIM_COLOR_GOOD_FAINT 0x00e0
-#define DIM_COLOR_BAD 0xfe17
-#define DIM_COLOR_MEH 0x3960
+#define DIM_COLOR_BAD 0xac71
+#define DIM_COLOR_MEH 0x51e0
 #define DIM_BACKGROUND 0x0000
 #define DIM_PLOT_COLOR DIM_COLOR_GOOD
 
@@ -382,7 +382,7 @@ void redrawTFT1() {
   updateCircle(tft1, TEMP_MAX, TEMP_MIN, TEMP_MIN, TEMP_MAX, TEMP_MIN_GOOD,
                 TEMP_MAX_GOOD, 1, 1);
   last_oiltemp_number = -100;
-  last_oiltemp_circle = PRESS_MIN;
+  last_oiltemp_circle = TEMP_MIN;
   avg_oiltemp = 0;
 
   // force update plots
