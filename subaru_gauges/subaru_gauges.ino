@@ -164,8 +164,6 @@ GND -> TFT1 GND
 GND -> GND LINE
 */
 
-#define DELAY 50
-
 // Define pin connections for each display
 #define TFT_CS1 6
 #define TFT_CS2 5
@@ -211,13 +209,13 @@ uint16_t PLOT_COLOR = BRIGHT_PLOT_COLOR;
 #define END_ANGLE 315
 
 #define PLOT_SIZE 120
-#define ACCEL_SIZE 40
 
 #define PLOT_X 60
 #define PLOT_Y 167
 #define PLOT_HEIGHT 50.
+#define NUMBERS_UPDATE_MS 200  // update numbrs in ms
 #define PLOT_UPDATE_MS 15000  // plot  ais should be 10 min
-#define AVG_SIZE 3            // 150 ms
+#define AVG_SIZE 2            // 100 ms
 
 const float p1 = 0.000000000001753474230565890000;
 const float p2 = 0.000000002072841370044680000000;
@@ -267,7 +265,6 @@ LinkedList<uint16_t> plotOilPress = LinkedList<uint16_t>();
 int16_t avg_x = 0;
 int16_t avg_y = 0;
 uint8_t current_avg_size = 0;
-// int8_t accelList[ACCEL_SIZE];
 int16_t last_x = 0;
 int16_t last_y = 0;
 int16_t x_max = 0;
@@ -291,8 +288,10 @@ Adafruit_GC9A01A tft3 = Adafruit_GC9A01A(TFT_CS3, TFT_DC, -1);
 
 Adafruit_I2CDevice *i2c_dev = NULL;
 
-unsigned long startTime;
+unsigned long startTime_plot;
 bool doReplot = true;
+unsigned long startTime_numbers;
+bool doNumbersUpdate = true;
 
 bool button_press_count = getButtonPressed();
 unsigned long last_button_press = millis();
@@ -349,7 +348,7 @@ void redrawTFT3() {
     avg_watertemp = 0;
 
     // force update plots
-    startTime -= PLOT_UPDATE_MS;
+    startTime_plot -= PLOT_UPDATE_MS;
     clearPlotPixels(tft3);
   }
 }
@@ -368,7 +367,7 @@ void redrawTFT2() {
   avg_oilpressure = 0;
 
   // force update plots
-  startTime -= PLOT_UPDATE_MS;
+  startTime_plot -= PLOT_UPDATE_MS;
   clearPlotPixels(tft2);
 }
 
@@ -386,7 +385,7 @@ void redrawTFT1() {
   avg_oiltemp = 0;
 
   // force update plots
-  startTime -= PLOT_UPDATE_MS;
+  startTime_plot -= PLOT_UPDATE_MS;
   clearPlotPixels(tft1);
 }
 
@@ -426,45 +425,57 @@ void setup() {
 
   startupAnimation();
 
-  startTime = millis();
+  startTime_plot = millis();
+  startTime_numbers = millis();
 }
 
 void loop() {
   // check plot update interval
   unsigned long loopStart = millis();
-  if (loopStart - startTime >= PLOT_UPDATE_MS) {
+  if (loopStart - startTime_plot >= PLOT_UPDATE_MS) {
     doReplot = true;
-    startTime = loopStart;
+    startTime_plot = loopStart;
+  }
+
+  // check numbers update interval
+  if (loopStart - startTime_numbers >= NUMBERS_UPDATE_MS) {
+    doNumbersUpdate = true;
+    startTime_numbers = loopStart;
   }
 
   // OIL TEMPERATURE
-  int o = analogRead(OIL_TEMP_SENSOR_PIN);
   float oiltemp = 0;
+  if(doNumbersUpdate || doReplot) {
+    int o = analogRead(OIL_TEMP_SENSOR_PIN);
 
-  if (o <= 325) {
-    oiltemp = p1 * pow(o, 6) - p2 * pow(o, 5) + p3 * pow(o, 4) -
-              p4 * pow(o, 3) + p5 * pow(o, 2) - p6 * o + p7;
-  } else {
-    oiltemp = -n1 * pow(o, 6) + n2 * pow(o, 5) - n3 * pow(o, 4) +
-              n4 * pow(o, 3) - n5 * pow(o, 2) + n6 * o - n7;
-  }
-  oiltemp -= 2.5;
-  if (avg_oiltemp == 0) {
-    avg_oiltemp = oiltemp;
-  } else {
-    avg_oiltemp = (avg_oiltemp + oiltemp) / 2;
+    if (o <= 325) {
+      oiltemp = p1 * pow(o, 6) - p2 * pow(o, 5) + p3 * pow(o, 4) -
+                p4 * pow(o, 3) + p5 * pow(o, 2) - p6 * o + p7;
+    } else {
+      oiltemp = -n1 * pow(o, 6) + n2 * pow(o, 5) - n3 * pow(o, 4) +
+                n4 * pow(o, 3) - n5 * pow(o, 2) + n6 * o - n7;
+    }
+    oiltemp -= 2.5;
+    if (avg_oiltemp == 0) {
+      avg_oiltemp = oiltemp;
+    } else {
+      avg_oiltemp = (avg_oiltemp + oiltemp) / 2;
+    }
   }
 
-  if (abs(oiltemp - last_oiltemp_number) > 0.1 || oiltemp >= TEMP_MAX_GOOD) {
-    updateDisplay(tft1, oiltemp, last_oiltemp_number, 1, TEMP_MIN_GOOD,
-                  TEMP_MAX_GOOD, 1, TEMP_DIGITS, &flash_oil_temp);
-    last_oiltemp_number = oiltemp;
+  if(doNumbersUpdate) {
+    if (abs(oiltemp - last_oiltemp_number) >= 0.1 || oiltemp >= TEMP_MAX_GOOD) {
+      updateDisplay(tft1, oiltemp, last_oiltemp_number, 1, TEMP_MIN_GOOD,
+                    TEMP_MAX_GOOD, 1, TEMP_DIGITS, &flash_oil_temp);
+      last_oiltemp_number = oiltemp;
+    }
+    if (abs(oiltemp - last_oiltemp_circle) > TEMP_DEGREE_UNIT) {
+      updateCircle(tft1, oiltemp, last_oiltemp_circle, TEMP_MIN, TEMP_MAX,
+                  TEMP_MIN_GOOD, TEMP_MAX_GOOD, 1, 0);
+      last_oiltemp_circle = oiltemp;
+    }
   }
-  if (abs(oiltemp - last_oiltemp_circle) > TEMP_DEGREE_UNIT) {
-    updateCircle(tft1, oiltemp, last_oiltemp_circle, TEMP_MIN, TEMP_MAX,
-                 TEMP_MIN_GOOD, TEMP_MAX_GOOD, 1, 0);
-    last_oiltemp_circle = oiltemp;
-  }
+
   if (doReplot) {
     updatePlot(tft1, plotOilTemp, avg_oiltemp, 0);
     avg_oiltemp = oiltemp;
@@ -519,8 +530,17 @@ void loop() {
       y_max = 0;
       y_min = 0;
 
-      tft3.drawFastVLine(120, 35, 170, COLOR_GOOD_FAINT);
-      tft3.drawFastHLine(50, 120, 140, COLOR_GOOD_FAINT);
+      for(int i = 35; i <= 205; i += 10) {
+        // if(i != 75 || i != 175)
+          tft3.drawFastHLine(117, i, 4, COLOR_GOOD_FAINT);
+      }
+
+      for(int i = 35; i <= 205; i += 10) {
+        // if(i != 75 || i != 175)
+          tft3.drawFastVLine(i, 117, 4, COLOR_GOOD_FAINT);
+      }
+
+      tft3.drawCircle(0, 0, 55, COLOR_GOOD_FAINT);
 
       // clear temp
       plotWaterTemp.clear();
@@ -537,7 +557,7 @@ void loop() {
       avg_watertemp = 0;
 
       // force update plots
-      startTime -= PLOT_UPDATE_MS;
+      startTime_plot -= PLOT_UPDATE_MS;
       clearPlotPixels(tft1);
       plotOilPress.clear();
       clearPlotPixels(tft2);
@@ -549,35 +569,41 @@ void loop() {
 
   bool updateWaterTemp = is_waiting_for_button ? button_is_on : !button_is_on;
   if (updateWaterTemp) {
-    // WATER TEMPERATURE
-    int w = analogRead(WATER_TEMP_SENSOR_PIN);
     float watertemp = 0;
 
-    if (w <= 325) {
-      watertemp = p1 * pow(w, 6) - p2 * pow(w, 5) + p3 * pow(w, 4) -
-                  p4 * pow(w, 3) + p5 * pow(w, 2) - p6 * w + p7;
-    } else {
-      watertemp = -n1 * pow(w, 6) + n2 * pow(w, 5) - n3 * pow(w, 4) +
-                  n4 * pow(w, 3) - n5 * pow(w, 2) + n6 * w - n7;
-    }
-    watertemp -= 1.5;
-    if (avg_watertemp == 0) {
-      avg_watertemp = watertemp;
-    } else {
-      avg_watertemp = (avg_watertemp + watertemp) / 2;
+    if(doNumbersUpdate || doReplot) {
+      // WATER TEMPERATURE
+      int w = analogRead(WATER_TEMP_SENSOR_PIN);
+
+      if (w <= 325) {
+        watertemp = p1 * pow(w, 6) - p2 * pow(w, 5) + p3 * pow(w, 4) -
+                    p4 * pow(w, 3) + p5 * pow(w, 2) - p6 * w + p7;
+      } else {
+        watertemp = -n1 * pow(w, 6) + n2 * pow(w, 5) - n3 * pow(w, 4) +
+                    n4 * pow(w, 3) - n5 * pow(w, 2) + n6 * w - n7;
+      }
+      watertemp -= 1.5;
+      if (avg_watertemp == 0) {
+        avg_watertemp = watertemp;
+      } else {
+        avg_watertemp = (avg_watertemp + watertemp) / 2;
+      }
     }
 
-    if (abs(watertemp - last_watertemp_number) > 0.1 ||
-        watertemp >= TEMP_MAX_GOOD) {
-      updateDisplay(tft3, watertemp, last_watertemp_number, 1, TEMP_MIN_GOOD,
-                    TEMP_MAX_GOOD, 1, TEMP_DIGITS, &flash_water_temp);
-      last_watertemp_number = watertemp;
+    if(doNumbersUpdate) {
+      if (abs(watertemp - last_watertemp_number) >= 0.1 ||
+          watertemp >= TEMP_MAX_GOOD) {
+        updateDisplay(tft3, watertemp, last_watertemp_number, 1, TEMP_MIN_GOOD,
+                      TEMP_MAX_GOOD, 1, TEMP_DIGITS, &flash_water_temp);
+        last_watertemp_number = watertemp;
+      }
+      if (abs(watertemp - last_watertemp_circle) > TEMP_DEGREE_UNIT) {
+        updateCircle(tft3, watertemp, last_watertemp_circle, TEMP_MIN, TEMP_MAX,
+                    TEMP_MIN_GOOD, TEMP_MAX_GOOD, 1, 0);
+        last_watertemp_circle = watertemp;
+      }
     }
-    if (abs(watertemp - last_watertemp_circle) > TEMP_DEGREE_UNIT) {
-      updateCircle(tft3, watertemp, last_watertemp_circle, TEMP_MIN, TEMP_MAX,
-                   TEMP_MIN_GOOD, TEMP_MAX_GOOD, 1, 0);
-      last_watertemp_circle = watertemp;
-    }
+
     if (doReplot) {
       updatePlot(tft3, plotWaterTemp, avg_watertemp, 0);
       avg_watertemp = watertemp;
@@ -602,18 +628,20 @@ void loop() {
   }
 
   // PRESSURE
-  float p = analogRead(PRESS_SENSOR_PIN) * (SENSOR_VOLTAGE / 1023.0);
-  float oilpressure = ((p / SENSOR_VOLTAGE - 0.1) / 0.0008) / 100;
-  avg_oilpressure_number_count ++;
-  avg_oilpressure_number = avg_oilpressure_number + oilpressure / 3;
+  float oilpressure;
+  if (avg_oilpressure_number_count < 3) {
+    float p = analogRead(PRESS_SENSOR_PIN) * (SENSOR_VOLTAGE / 1023.0);
+    oilpressure = max(0, ((p / SENSOR_VOLTAGE - 0.1) / 0.0008) / 100 - 0.03);
+    avg_oilpressure_number_count ++;
+    avg_oilpressure_number = avg_oilpressure_number + oilpressure / 3;
+  }
 
   // only update oil pressure after 3 reads (this is due to pulsations in the pressure readings)
-  if (avg_oilpressure_number_count >= 3) {
+  if (avg_oilpressure_number_count >= 3 && doNumbersUpdate) {
     oilpressure = avg_oilpressure_number;
-
     updateOilSwitch(oilpressure, &switch_is_on);
-    if (abs(oilpressure - last_oilpressure_number) > 0.01 ||
-        oilpressure <= PRESS_MIN_GOOD) {
+
+    if (abs(oilpressure - last_oilpressure_number) >= 0.01 || oilpressure <= PRESS_MIN_GOOD) {
       updateDisplay(tft2, oilpressure, last_oilpressure_number, 2, PRESS_MIN_GOOD,
                     PRESS_MAX_GOOD, 0, PRESS_DIGITS, &flash_oil_press);
       last_oilpressure_number = oilpressure;
@@ -624,28 +652,30 @@ void loop() {
       last_oilpressure_circle = oilpressure;
     }
     
+    // update oil pressure plot
+    if (avg_oilpressure == 0) {
+      avg_oilpressure = oilpressure;
+    } else {
+    avg_oilpressure = (avg_oilpressure + oilpressure) / 2;
+    }
+
     avg_oilpressure_number_count = 0;
     avg_oilpressure_number = 0;
   }
 
-  // update oil pressure plot
-  if (avg_oilpressure == 0) {
-    avg_oilpressure = oilpressure;
-  } else {
-    avg_oilpressure = (avg_oilpressure + oilpressure) / 2;
-    }
-  if (doReplot) {
+  if (doReplot && avg_oilpressure != 0) {
     updatePlot(tft2, plotOilPress, max(avg_oilpressure, 0), 0);
     avg_oilpressure = oilpressure;
   }
 
-  unsigned long loopTime = millis() - loopStart;
-  if (loopTime < DELAY) {
-    delay(DELAY - loopTime);
-  }
+
 
   if (doReplot) {
     doReplot = false;
+  }
+
+  if (doNumbersUpdate) {
+    doNumbersUpdate = false;
   }
 }
 
@@ -810,43 +840,43 @@ void updateAccelDisplay(Adafruit_GC9A01A &tft, int16_t x, int16_t y) {
 
   if (x_min > x || x_min == 0) {
     tft.setTextColor(BACKGROUND);
-    tft.setCursor(2, 113);
-    tft.print(abs((float)x_min / 1000));
+    tft.setCursor(7, 96);
+    tft.print(abs((float)x_min / 1000), 2);
     x_min = min(x_min, x);
 
-    tft.setTextColor(COLOR_GOOD);
-    tft.setCursor(2, 113);
-    tft.print(abs((float)x_min / 1000), 1);
+    tft.setTextColor(COLOR_BAD);
+    tft.setCursor(7, 96);
+    tft.print(abs((float)x_min / 1000), 2);
   }
   if (x_max < x || x_max == 0) {
     tft.setTextColor(BACKGROUND);
-    tft.setCursor(200, 113);
-    tft.print(abs((float)x_max / 1000), 1);
+    tft.setCursor(184, 96);
+    tft.print(abs((float)x_max / 1000), 2);
     x_max = max(x_max, x);
 
-    tft.setTextColor(COLOR_GOOD);
-    tft.setCursor(200, 113);
-    tft.print(abs((float)x_max / 1000), 1);
+    tft.setTextColor(COLOR_BAD);
+    tft.setCursor(184, 96);
+    tft.print(abs((float)x_max / 1000), 2);
   }
   if (y_min > y || y_min == 0) {
     tft.setTextColor(BACKGROUND);
-    tft.setCursor(102, 7);
-    tft.print(abs((float)y_min / 1000), 1);
+    tft.setCursor(97, 9);
+    tft.print(abs((float)y_min / 1000), 2);
     y_min = min(y_min, y);
 
-    tft.setTextColor(COLOR_GOOD);
-    tft.setCursor(102, 7);
-    tft.print(abs((float)y_min / 1000), 1);
+    tft.setTextColor(COLOR_BAD);
+    tft.setCursor(97, 9);
+    tft.print(abs((float)y_min / 1000), 2);
   }
   if (y_max < y || y_max == 0) {
     tft.setTextColor(BACKGROUND);
-    tft.setCursor(102, 223);
-    tft.print(abs((float)y_max / 1000), 1);
+    tft.setCursor(102, 221);
+    tft.print(abs((float)y_max / 1000), 2);
     y_max = max(y_max, y);
 
-    tft.setTextColor(COLOR_GOOD);
-    tft.setCursor(102, 223);
-    tft.print(abs((float)y_max / 1000), 1);
+    tft.setTextColor(COLOR_BAD);
+    tft.setCursor(102, 221);
+    tft.print(abs((float)y_max / 1000), 2);
   }
 }
 
