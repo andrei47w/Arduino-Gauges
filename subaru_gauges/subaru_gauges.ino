@@ -215,7 +215,7 @@ uint16_t PLOT_COLOR = BRIGHT_PLOT_COLOR;
 #define PLOT_HEIGHT 50.
 #define NUMBERS_UPDATE_MS 200  // update numbrs in ms
 #define PLOT_UPDATE_MS 15000  // plot  ais should be 10 min
-#define AVG_SIZE 2            // 100 ms
+#define AVG_SIZE 25
 
 const float p1 = 0.000000000001753474230565890000;
 const float p2 = 0.000000002072841370044680000000;
@@ -492,18 +492,18 @@ void loop() {
     if(button_press_count == 1 && millis() - last_button_press > buttonTimeout) {
       is_waiting_for_button = true;
       last_button_press = millis();
-    Serial.print("wait   ");
-    Serial.print(button_press_count);
-    Serial.print("   ");
-    Serial.print( millis() - last_button_press);
-    Serial.print("\n"); 
+    // Serial.print("wait   ");
+    // Serial.print(button_press_count);
+    // Serial.print("   ");
+    // Serial.print( millis() - last_button_press);
+    // Serial.print("\n"); 
     } else
     // 2 button presses within the last buttonTimeoutms -> change brightness
     if(is_waiting_for_button && millis() - last_button_press < buttonTimeout) {
-      Serial.println("change light");
-      button_press_count = 0;
-      is_waiting_for_button = false;
-      last_button_press = millis();
+      // Serial.println("change light");
+      // button_press_count = 0;
+      // is_waiting_for_button = false;
+      // last_button_press = millis();
 
       swapColors();
       redrawTFT1();
@@ -514,11 +514,11 @@ void loop() {
   // buttonTimeout ms has passed from last press and we can change the screen
   // only one press in the last buttonTimeout ms -> change screen
   if (button_press_count == 1 && millis() - last_button_press > buttonTimeout) {
-    Serial.print("change screen   ");
-    Serial.print(button_press_count);
-    Serial.print("   ");
-    Serial.print( millis() - last_button_press);
-    Serial.print("\n");
+    // Serial.print("change screen   ");
+    // Serial.print(button_press_count);
+    // Serial.print("   ");
+    // Serial.print( millis() - last_button_press);
+    // Serial.print("\n");
 
     button_press_count = 0;
     is_waiting_for_button = false;
@@ -530,17 +530,17 @@ void loop() {
       y_max = 0;
       y_min = 0;
 
-      for(int i = 35; i <= 205; i += 10) {
-        // if(i != 75 || i != 175)
-          tft3.drawFastHLine(117, i, 4, COLOR_GOOD_FAINT);
+      for(int i = 35; i <= 215; i += 15) {
+        if(i > 130 || i < 110)
+          tft3.drawFastHLine(117, i, 4, COLOR_GOOD);
       }
 
-      for(int i = 35; i <= 205; i += 10) {
-        // if(i != 75 || i != 175)
-          tft3.drawFastVLine(i, 117, 4, COLOR_GOOD_FAINT);
+      for(int i = 35; i <= 215; i += 15) {
+        if(i > 130 || i < 110)
+          tft3.drawFastVLine(i, 117, 4, COLOR_GOOD);
       }
 
-      tft3.drawCircle(0, 0, 55, COLOR_GOOD_FAINT);
+      tft3.drawCircle(117, 117, 60, COLOR_GOOD_FAINT);
 
       // clear temp
       plotWaterTemp.clear();
@@ -611,8 +611,9 @@ void loop() {
   } else {
     // ACCEL
 
-    int16_t x = read16(0x32) * 3.99719054;
-    int16_t y = read16(0x34) * 3.99719054;
+    float accel_scale = 3.99719054;
+    int16_t x = read16(0x32) * accel_scale;
+    int16_t y = read16(0x34) * accel_scale + 140;
 
     if (AVG_SIZE > current_avg_size) {
       avg_x += x / AVG_SIZE;
@@ -623,7 +624,9 @@ void loop() {
       avg_x = x;
       avg_y = y;
 
-      updateAccelDisplay(tft3, x, y);
+      uint8_t diff = 10;
+      if (abs(avg_x - last_x) > diff || abs(avg_y - last_y) > diff)
+        updateAccelDisplay(tft3, x, y);
     }
   }
 
@@ -663,7 +666,7 @@ void loop() {
     avg_oilpressure_number = 0;
   }
 
-  if (doReplot && avg_oilpressure != 0) {
+  if (doReplot || avg_oilpressure != 0) {
     updatePlot(tft2, plotOilPress, max(avg_oilpressure, 0), 0);
     avg_oilpressure = oilpressure;
   }
@@ -829,54 +832,56 @@ void updateAccelDisplay(Adafruit_GC9A01A &tft, int16_t x, int16_t y) {
   uint8_t dot_size = 5;
 
   // draw current accel
-  tft.fillCircle(last_x / 18 + 120, last_y / 18 + 120, dot_size,
+  tft.fillCircle(last_x / 18 + 117, last_y / 18 + 117, dot_size,
                  COLOR_GOOD_FAINT);
-  tft.fillCircle(x / 18 + 120, y / 18 + 120, dot_size, COLOR);
+  tft.fillCircle(x / 18 + 117, y / 18 + 117, dot_size, COLOR);
   last_x = x;
   last_y = y;
 
   // draw text
   tft.setTextSize(2);
+  int scale = 1000;
+  uint8_t prec = 2;
 
   if (x_min > x || x_min == 0) {
     tft.setTextColor(BACKGROUND);
-    tft.setCursor(7, 96);
-    tft.print(abs((float)x_min / 1000), 2);
+    tft.setCursor(7, 145);
+    tft.print(abs((float)x_min / scale), prec);
     x_min = min(x_min, x);
 
-    tft.setTextColor(COLOR_BAD);
-    tft.setCursor(7, 96);
-    tft.print(abs((float)x_min / 1000), 2);
+    tft.setTextColor(COLOR_GOOD);
+    tft.setCursor(7, 145);
+    tft.print(abs((float)x_min / scale), prec);
   }
   if (x_max < x || x_max == 0) {
     tft.setTextColor(BACKGROUND);
-    tft.setCursor(184, 96);
-    tft.print(abs((float)x_max / 1000), 2);
+    tft.setCursor(184, 145);
+    tft.print(abs((float)x_max / scale), prec);
     x_max = max(x_max, x);
 
-    tft.setTextColor(COLOR_BAD);
-    tft.setCursor(184, 96);
-    tft.print(abs((float)x_max / 1000), 2);
+    tft.setTextColor(COLOR_GOOD);
+    tft.setCursor(184, 145);
+    tft.print(abs((float)x_max / scale), prec);
   }
   if (y_min > y || y_min == 0) {
     tft.setTextColor(BACKGROUND);
     tft.setCursor(97, 9);
-    tft.print(abs((float)y_min / 1000), 2);
+    tft.print(abs((float)y_min / scale), prec);
     y_min = min(y_min, y);
 
-    tft.setTextColor(COLOR_BAD);
+    tft.setTextColor(COLOR_GOOD);
     tft.setCursor(97, 9);
-    tft.print(abs((float)y_min / 1000), 2);
+    tft.print(abs((float)y_min / scale), prec);
   }
   if (y_max < y || y_max == 0) {
     tft.setTextColor(BACKGROUND);
     tft.setCursor(102, 221);
-    tft.print(abs((float)y_max / 1000), 2);
+    tft.print(abs((float)y_max / scale), prec);
     y_max = max(y_max, y);
 
-    tft.setTextColor(COLOR_BAD);
+    tft.setTextColor(COLOR_GOOD);
     tft.setCursor(102, 221);
-    tft.print(abs((float)y_max / 1000), 2);
+    tft.print(abs((float)y_max / scale), prec);
   }
 }
 
