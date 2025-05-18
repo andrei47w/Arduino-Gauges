@@ -635,7 +635,7 @@ void loop() {
   float oilpressure;
   if (avg_oilpressure_number_count < avg_oilpressure_number_cap) {
     float p = analogRead(PRESS_SENSOR_PIN) * (SENSOR_VOLTAGE / 1023.0);
-    oilpressure = max(0, ((p / SENSOR_VOLTAGE - 0.1) / 0.0008) / 100 - 0.02);
+    oilpressure = max(0, ((p / SENSOR_VOLTAGE - 0.1) / 0.0008) / 100 + 0.04);
     avg_oilpressure_number_count ++;
     avg_oilpressure_number = avg_oilpressure_number + oilpressure / avg_oilpressure_number_cap;
   }
