@@ -213,9 +213,9 @@ uint16_t PLOT_COLOR = BRIGHT_PLOT_COLOR;
 #define PLOT_X 60
 #define PLOT_Y 167
 #define PLOT_HEIGHT 50.
-#define NUMBERS_UPDATE_MS 200  // update numbrs in ms
+#define NUMBERS_UPDATE_MS 50  // update numbrs in ms
 #define PLOT_UPDATE_MS 15000  // plot  ais should be 10 min
-#define AVG_SIZE 25
+#define AVG_SIZE 50
 
 const float p1 = 0.000000000001753474230565890000;
 const float p2 = 0.000000002072841370044680000000;
@@ -259,6 +259,7 @@ float last_oilpressure_number = -100;
 float avg_oilpressure = 0;
 float avg_oilpressure_number = 0;
 uint8_t avg_oilpressure_number_count = 0;
+uint8_t avg_oilpressure_number_cap = 60;
 float last_oilpressure_circle = PRESS_MIN;
 LinkedList<uint16_t> plotOilPress = LinkedList<uint16_t>();
 
@@ -591,7 +592,7 @@ void loop() {
     }
 
     if(doNumbersUpdate) {
-      if (abs(watertemp - last_watertemp_number) >= 0.1 ||
+      if (abs(watertemp - last_watertemp_number) >= 0.2 ||
           watertemp >= TEMP_MAX_GOOD) {
         updateDisplay(tft3, watertemp, last_watertemp_number, 1, TEMP_MIN_GOOD,
                       TEMP_MAX_GOOD, 1, TEMP_DIGITS, &flash_water_temp);
@@ -632,15 +633,15 @@ void loop() {
 
   // PRESSURE
   float oilpressure;
-  if (avg_oilpressure_number_count < 3) {
+  if (avg_oilpressure_number_count < avg_oilpressure_number_cap) {
     float p = analogRead(PRESS_SENSOR_PIN) * (SENSOR_VOLTAGE / 1023.0);
-    oilpressure = max(0, ((p / SENSOR_VOLTAGE - 0.1) / 0.0008) / 100 - 0.03);
+    oilpressure = max(0, ((p / SENSOR_VOLTAGE - 0.1) / 0.0008) / 100 - 0.02);
     avg_oilpressure_number_count ++;
-    avg_oilpressure_number = avg_oilpressure_number + oilpressure / 3;
+    avg_oilpressure_number = avg_oilpressure_number + oilpressure / avg_oilpressure_number_cap;
   }
 
   // only update oil pressure after 3 reads (this is due to pulsations in the pressure readings)
-  if (avg_oilpressure_number_count >= 3 && doNumbersUpdate) {
+  if (avg_oilpressure_number_count >= avg_oilpressure_number_cap && doNumbersUpdate) {
     oilpressure = avg_oilpressure_number;
     updateOilSwitch(oilpressure, &switch_is_on);
 
@@ -666,7 +667,7 @@ void loop() {
     avg_oilpressure_number = 0;
   }
 
-  if (doReplot || avg_oilpressure != 0) {
+  if (doReplot) {
     updatePlot(tft2, plotOilPress, max(avg_oilpressure, 0), 0);
     avg_oilpressure = oilpressure;
   }
